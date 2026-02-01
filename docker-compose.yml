@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  padel-booking:
+    build: .
+    container_name: padel-booking
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      - ESTELLE_USERNAME=${ESTELLE_USERNAME}
+      - ESTELLE_PASSWORD=${ESTELLE_PASSWORD}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - DRY_RUN=${DRY_RUN:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PRE_LOGIN_MINUTES=${PRE_LOGIN_MINUTES:-10}
+    volumes:
+      # Persist database and screenshots
+      - ./data:/app/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

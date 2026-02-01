@@ -9,8 +9,8 @@ org_name = "george-crosby-015c08"
 project_name = "gc-estelle"
 environment  = "dev"
 
-# GVC Configuration (using existing save30 GVC)
-gvc_name  = "save30-gvc"
+# GVC Configuration (using existing dev GVC)
+gvc_name  = "dev"
 locations = ["aws-eu-central-1"]
 
 # Image Configuration

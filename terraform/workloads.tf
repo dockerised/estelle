@@ -65,11 +65,9 @@ resource "cpln_workload" "padel_booking" {
       period_seconds        = 20
     }
 
-    # Mount persistent volume for database and browser state
-    volume {
-      uri  = "//secret/gc-estelle-data"
-      path = "/app/data"
-    }
+    # Note: Data will be stored in container filesystem
+    # For production, consider mounting external storage (S3, GCS, etc.)
+    # Example: volume { uri = "s3://bucket-name/path", path = "/app/data" }
   }
 
   options {
@@ -83,7 +81,7 @@ resource "cpln_workload" "padel_booking" {
       max_scale           = var.max_replicas
       min_scale           = var.min_replicas
       max_concurrency     = 1
-      scale_to_zero_delay = 0
+      scale_to_zero_delay = 300
     }
   }
 

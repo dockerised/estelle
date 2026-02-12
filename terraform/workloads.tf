@@ -1,4 +1,22 @@
 # =============================================================================
+# Persistent Storage for Database and Screenshots
+# =============================================================================
+
+resource "cpln_volume_set" "booking_data" {
+  gvc         = data.cpln_gvc.save30.name
+  name        = "${var.project_name}-data"
+  description = "Persistent storage for booking database and screenshots"
+
+  tags = var.common_tags
+
+  initial_capacity = 10  # 10GB
+
+  performance_class = "general-purpose-ssd"
+
+  file_system_type = "ext4"
+}
+
+# =============================================================================
 # Estelle Manor Padel Booking Workload
 # =============================================================================
 
@@ -65,9 +83,11 @@ resource "cpln_workload" "padel_booking" {
       period_seconds        = 20
     }
 
-    # Note: Data will be stored in container filesystem
-    # For production, consider mounting external storage (S3, GCS, etc.)
-    # Example: volume { uri = "s3://bucket-name/path", path = "/app/data" }
+    # Note: Persistent storage temporarily disabled - focusing on headless browser fix
+    # volume {
+    #   uri  = "cpln://volumeset/${cpln_volume_set.booking_data.name}"
+    #   path = "/app/data"
+    # }
   }
 
   options {

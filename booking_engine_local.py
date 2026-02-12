@@ -21,30 +21,26 @@ class BookingEngine:
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
-        self.screenshots_dir = Path("./data/screenshots")
+        # Use /tmp for screenshots in local mode to avoid permission issues
+        self.screenshots_dir = Path("/tmp/screenshots")
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
     async def init_browser(self) -> Browser:
-        """Initialize Playwright browser in headed mode with Xvfb virtual display."""
-        logger.info("Initializing Playwright browser (headed mode with Xvfb virtual display)")
+        """Initialize Playwright browser in VISIBLE headed mode for local development."""
+        logger.info("Initializing Playwright browser (LOCAL MODE - visible browser window)")
         self._playwright = await async_playwright().start()
 
-        # Run in headed mode (not headless) since we have Xvfb providing a virtual display
-        # This bypasses all headless detection since the browser is actually "headed"
+        # Run in visible headed mode for local development/debugging
+        # The browser window will be visible on your screen
         self._browser = await self._playwright.chromium.launch(
-            headless=False,  # Headed mode with Xvfb virtual display
+            headless=False,  # Visible browser window for local development
+            slow_mo=500,  # Slow down operations by 500ms for easier debugging
             args=[
                 "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-renderer-backgrounding",
-                "--disable-background-timer-throttling"
-            ],
-            chromium_sandbox=False
+                "--start-maximized"  # Start browser maximized for better visibility
+            ]
         )
+        logger.info("Browser launched - you should see the browser window")
         return self._browser
 
     async def get_context(self, fresh: bool = False) -> BrowserContext:
@@ -201,69 +197,22 @@ class BookingEngine:
             await asyncio.sleep(5)
 
             # Take screenshot for debugging
-            await page.screenshot(path="data/screenshots/booking_page_loaded.png", full_page=True)
-            logger.info("Screenshot taken: booking_page_loaded.png")
+            screenshot_path = self.screenshots_dir / "booking_page_loaded.png"
+            await page.screenshot(path=str(screenshot_path), full_page=True)
+            logger.info(f"Screenshot taken: {screenshot_path}")
 
             # Log page title for debugging
             page_title = await page.title()
             logger.info(f"Page title: {page_title}")
 
-            # Try multiple methods to dismiss overlays/modals (AGGRESSIVE - site changed since Feb 5th)
-            logger.info("Attempting to dismiss any popups/modals...")
+            # Simple popup dismissal - just press Escape a few times
+            logger.info("Pressing Escape to dismiss any potential popups...")
             try:
-                # Wait a bit for any popups to appear
-                await asyncio.sleep(3)
-
-                # Method 1: Press Escape multiple times first
-                for i in range(5):
+                for i in range(2):
                     await page.keyboard.press('Escape')
-                    await asyncio.sleep(0.3)
-
-                # Method 2: Look for and click ANY buttons containing "close", "accept", "ok", "dismiss"
-                button_texts = ['close', 'accept', 'ok', 'dismiss', 'continue', 'got it', 'agree']
-                for text in button_texts:
-                    try:
-                        buttons = page.locator(f'button:has-text("{text}"), a:has-text("{text}")')
-                        count = await buttons.count()
-                        if count > 0:
-                            for i in range(min(count, 3)):  # Click up to 3 matches
-                                try:
-                                    await buttons.nth(i).click(timeout=2000)
-                                    logger.info(f"Clicked button with text: {text}")
-                                    await asyncio.sleep(0.5)
-                                except:
-                                    pass
-                    except:
-                        pass
-
-                # Method 3: Click specific selectors
-                close_selectors = [
-                    'button.close', '.modal-close', '[aria-label="Close"]',
-                    '.popup-close', '#close-button', '[data-dismiss="modal"]',
-                    '.cookie-accept', '#accept-cookies', '.triptease-close',
-                    '.tt-messaging__container button', '.modal-backdrop'
-                ]
-                for selector in close_selectors:
-                    try:
-                        close_btn = page.locator(selector)
-                        if await close_btn.count() > 0:
-                            await close_btn.first.click(timeout=2000)
-                            logger.info(f"Clicked: {selector}")
-                            await asyncio.sleep(0.5)
-                    except:
-                        pass
-
-                # Method 4: Click anywhere on page to dismiss
-                try:
-                    await page.click('body', position={'x': 10, 'y': 10}, timeout=2000)
-                    await asyncio.sleep(1)
-                except:
-                    pass
-
-                logger.info("Modal dismissal complete")
-
+                    await asyncio.sleep(0.5)
             except Exception as e:
-                logger.debug(f"Modal dismissal attempts completed: {e}")
+                logger.debug(f"Escape dismissal: {e}")
 
             # The date input should exist (don't wait for visible - jQuery datepicker might hide it)
             logger.info("Looking for date input in DOM...")

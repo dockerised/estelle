@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies for Playwright
+# Install system dependencies for Playwright + Xvfb for virtual display
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     lsb-release \
     xdg-utils \
+    xvfb \
+    dbus-x11 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -66,5 +68,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')"
 
-# Run the application
-CMD ["python", "app.py"]
+# Run the application with Xvfb (virtual display)
+# Start Xvfb on display :99, then run the app
+CMD sh -c 'Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
+    export DISPLAY=:99 && \
+    sleep 2 && \
+    python app.py'

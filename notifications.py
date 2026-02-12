@@ -1,9 +1,11 @@
 """Discord webhook notifications."""
 import httpx
 import logging
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
+from io import BytesIO
 from config import settings
+from calendar_utils import calendar_generator
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +20,21 @@ class DiscordNotifier:
         self,
         content: str,
         embeds: Optional[list] = None,
-        username: str = "Padel Booking Bot"
+        username: str = "Padel Booking Bot",
+        files: Optional[Dict[str, BytesIO]] = None
     ) -> bool:
-        """Send a message to Discord."""
+        """
+        Send a message to Discord.
+
+        Args:
+            content: Message content
+            embeds: List of embed objects
+            username: Bot username to display
+            files: Optional dict of filename -> BytesIO file data for attachments
+
+        Returns:
+            True if message sent successfully, False otherwise
+        """
         try:
             payload = {
                 "username": username,
@@ -30,11 +44,35 @@ class DiscordNotifier:
                 payload["embeds"] = embeds
 
             async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self.webhook_url,
-                    json=payload,
-                    timeout=10.0
-                )
+                if files:
+                    # Use multipart/form-data for file attachments
+                    import json
+
+                    # Prepare files for multipart upload
+                    files_data = {}
+                    for idx, (filename, file_data) in enumerate(files.items()):
+                        file_data.seek(0)  # Reset file pointer
+                        files_data[f'files[{idx}]'] = (filename, file_data, 'text/calendar')
+
+                    # JSON payload goes in payload_json field
+                    multipart_data = {
+                        'payload_json': json.dumps(payload)
+                    }
+
+                    response = await client.post(
+                        self.webhook_url,
+                        data=multipart_data,
+                        files=files_data,
+                        timeout=10.0
+                    )
+                else:
+                    # Standard JSON request
+                    response = await client.post(
+                        self.webhook_url,
+                        json=payload,
+                        timeout=10.0
+                    )
+
                 response.raise_for_status()
                 logger.info("Discord notification sent successfully")
                 return True
@@ -49,7 +87,7 @@ class DiscordNotifier:
         booked_time: str,
         court_name: Optional[str] = None
     ):
-        """Notify about successful booking."""
+        """Notify about successful booking with calendar invite attachment."""
         embed = {
             "title": "✅ Booking Successful!",
             "color": 3066993,  # Green
@@ -65,9 +103,32 @@ class DiscordNotifier:
                 {"name": "Court", "value": court_name, "inline": False}
             )
 
+        # Generate calendar invite file
+        files = None
+        try:
+            ics_file = calendar_generator.generate_ics(
+                booking_date=booking_date,
+                booking_time=booked_time,
+                court_name=court_name or "TBD"
+            )
+            filename = calendar_generator.generate_filename(booking_date, booked_time)
+            files = {filename: ics_file}
+
+            # Add calendar field to embed
+            embed["fields"].append(
+                {"name": "📅 Calendar", "value": "Download the attached .ics file to add to your calendar", "inline": False}
+            )
+
+            logger.info(f"Generated calendar invite: {filename}")
+
+        except Exception as e:
+            # Graceful fallback: send notification without calendar attachment
+            logger.error(f"Failed to generate calendar invite: {e}", exc_info=True)
+
         await self.send_message(
             content="🎾 **Padel court booked successfully!**",
-            embeds=[embed]
+            embeds=[embed],
+            files=files
         )
 
     async def booking_failed(

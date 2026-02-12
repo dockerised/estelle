@@ -73,10 +73,21 @@ class EventsMonitor:
 
             # Filter out obvious non-events
             filtered_containers = []
+            ignore_list = [
+                'login', 'home', 'menu', 'search', 'estelle manor',
+                'book a room', 'book a stay', 'make a booking', 'reserve',
+                'contact us', 'about us', 'privacy policy', 'terms',
+                'footer', 'header', 'navigation', 'subscribe',
+                'follow us', 'social media', 'back to top'
+            ]
             for container in event_containers:
                 text = (await container.text_content() or '').strip()
-                # Skip empty, "Login", "Home" etc
-                if text and text.lower() not in ['login', 'home', 'menu', 'search', '']:
+                text_lower = text.lower()
+                # Skip empty or generic site navigation
+                if text and text_lower not in ignore_list and len(text) > 5:
+                    # Also skip if it's just the site name with no additional info
+                    if text_lower == 'estelle manor':
+                        continue
                     filtered_containers.append(container)
 
             event_containers = filtered_containers
@@ -121,6 +132,17 @@ class EventsMonitor:
                                 link = href if href.startswith('http') else f"https://home.estellemanor.com{href}"
                     except:
                         pass
+
+                    # Skip if link points to generic pages (not actual events)
+                    if link and any(generic in link.lower() for generic in ['/book-a-room', '/reserve', '/contact', '/about']):
+                        logger.debug(f"Skipping non-event link: {title}")
+                        continue
+
+                    # Skip if title is too generic
+                    generic_titles = ['estelle manor', 'book now', 'reserve', 'learn more']
+                    if title.lower() in generic_titles:
+                        logger.debug(f"Skipping generic title: {title}")
+                        continue
 
                     event = {
                         'title': title,
@@ -228,19 +250,24 @@ class EventsMonitor:
                 })
 
                 await notifier.send_message(
-                    content="📅 **New event posted at Estelle Manor!**",
+                    content=f"📅 **New event posted at Estelle Manor: {event['title']}**",
                     embeds=[embed]
                 )
 
             else:
                 # Multiple events notification
-                description = "\n".join([f"• {e['title']}" for e in events[:10]])
+                event_names = "\n".join([f"• {e['title']}" for e in events[:10]])
                 if len(events) > 10:
-                    description += f"\n...and {len(events) - 10} more"
+                    event_names += f"\n...and {len(events) - 10} more"
+
+                # Include first 3 event names in the content
+                first_three = ", ".join([e['title'] for e in events[:3]])
+                if len(events) > 3:
+                    first_three += f" and {len(events) - 3} more"
 
                 embed = {
                     "title": f"🎉 {len(events)} New Events at Estelle Manor!",
-                    "description": description,
+                    "description": event_names,
                     "color": 5814783,
                     "fields": [{
                         "name": "View All Events",
@@ -251,7 +278,7 @@ class EventsMonitor:
                 }
 
                 await notifier.send_message(
-                    content=f"📅 **{len(events)} new events posted at Estelle Manor!**",
+                    content=f"📅 **{len(events)} new events: {first_three}**",
                     embeds=[embed]
                 )
 

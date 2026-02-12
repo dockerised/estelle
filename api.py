@@ -1,8 +1,9 @@
 """FastAPI REST API for Padel booking system."""
 import logging
 from typing import Optional
+from datetime import datetime
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from database import db
 from scheduler import scheduler
@@ -261,6 +262,56 @@ async def test_notification():
     except Exception as e:
         logger.error(f"Error sending test notification: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/test/booking")
+async def test_booking(
+    booking_date: str = Query(..., description="Booking date in YYYY-MM-DD format"),
+    time_primary: str = Query(..., description="Primary time (e.g., 10am, 7pm)"),
+    time_fallback: Optional[str] = Query(None, description="Fallback time")
+):
+    """Execute a test booking immediately (bypasses scheduler)."""
+    try:
+        logger.info(f"Test booking requested for {booking_date} at {time_primary}")
+
+        # Create a temporary booking record
+        booking_id = db.create_booking(
+            booking_date=booking_date,
+            time_primary=time_primary,
+            time_fallback=time_fallback,
+            execute_at=datetime.utcnow().isoformat()
+        )
+
+        # Execute the booking immediately with all required parameters
+        await engine.execute_booking(
+            booking_id=booking_id,
+            booking_date=booking_date,
+            time_primary=time_primary,
+            time_fallback=time_fallback
+        )
+
+        # Get the result
+        booking = db.get_booking(booking_id)
+
+        return {
+            "success": True,
+            "message": f"Test booking executed",
+            "booking": booking
+        }
+
+    except Exception as e:
+        logger.error(f"Error executing test booking: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/screenshots/{filename}")
+async def get_screenshot(filename: str):
+    """Serve a screenshot file for debugging."""
+    import os
+    filepath = f"data/screenshots/{filename}"
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+    return FileResponse(filepath, media_type="image/png")
 
 
 @app.get("/events/recent")

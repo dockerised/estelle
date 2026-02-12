@@ -41,5 +41,8 @@ class Settings(BaseSettings):
     events_monitoring_enabled: bool = False
     events_check_interval_hours: int = 6  # Check every 6 hours
 
+    # Redis Configuration (for persistent bookings across scale-to-zero)
+    redis_url: str = "redis://redis-shared.dev.cpln.local:6379"
+
 
 settings = Settings()

@@ -7,6 +7,9 @@ from typing import List, Optional, Dict, Any
 from contextlib import contextmanager
 from config import settings
 
+# Import Redis store - will be initialized after this module loads
+redis_store = None
+
 
 class Database:
     """SQLite database manager for booking state."""
@@ -94,7 +97,12 @@ class Database:
         time_fallback: Optional[str],
         execute_at: str
     ) -> int:
-        """Create a new booking entry."""
+        """Create a new booking entry and persist to Redis."""
+        global redis_store
+        if redis_store is None:
+            from redis_persistence import redis_store as _redis_store
+            redis_store = _redis_store
+
         now = datetime.utcnow().isoformat()
         with self.get_conn() as conn:
             cursor = conn.execute(
@@ -104,6 +112,49 @@ class Database:
                 VALUES (?, ?, ?, 'pending', ?, ?, ?)
                 """,
                 (booking_date, time_primary, time_fallback, execute_at, now, now)
+            )
+            booking_id = cursor.lastrowid
+
+            # Also save to Redis for persistence across scale-to-zero
+            booking_data = {
+                'id': booking_id,
+                'booking_date': booking_date,
+                'time_primary': time_primary,
+                'time_fallback': time_fallback,
+                'status': 'pending',
+                'execute_at': execute_at,
+                'created_at': now,
+                'updated_at': now
+            }
+            redis_store.save_booking(booking_data)
+
+            return booking_id
+
+    def create_booking_from_dict(self, booking_dict: Dict) -> int:
+        """Create booking from Redis dict (for loading from persistence)."""
+        now = datetime.utcnow().isoformat()
+        with self.get_conn() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO bookings
+                (id, booking_date, time_primary, time_fallback, status, execute_at,
+                 court_name, booked_time, error_message, screenshot_path, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    booking_dict['id'],
+                    booking_dict['booking_date'],
+                    booking_dict['time_primary'],
+                    booking_dict.get('time_fallback'),
+                    booking_dict.get('status', 'pending'),
+                    booking_dict['execute_at'],
+                    booking_dict.get('court_name'),
+                    booking_dict.get('booked_time'),
+                    booking_dict.get('error_message'),
+                    booking_dict.get('screenshot_path'),
+                    booking_dict.get('created_at', now),
+                    booking_dict.get('updated_at', now)
+                )
             )
             return cursor.lastrowid
 
@@ -116,7 +167,12 @@ class Database:
         error_message: Optional[str] = None,
         screenshot_path: Optional[str] = None
     ):
-        """Update booking status and details."""
+        """Update booking status and details, syncing to Redis."""
+        global redis_store
+        if redis_store is None:
+            from redis_persistence import redis_store as _redis_store
+            redis_store = _redis_store
+
         now = datetime.utcnow().isoformat()
         with self.get_conn() as conn:
             conn.execute(
@@ -132,6 +188,19 @@ class Database:
                 """,
                 (status, court_name, booked_time, error_message, screenshot_path, now, booking_id)
             )
+
+        # Also update in Redis for persistence
+        update_fields = {'status': status}
+        if court_name:
+            update_fields['court_name'] = court_name
+        if booked_time:
+            update_fields['booked_time'] = booked_time
+        if error_message is not None:
+            update_fields['error_message'] = error_message
+        if screenshot_path:
+            update_fields['screenshot_path'] = screenshot_path
+
+        redis_store.update_booking_status(booking_id, status, **update_fields)
 
     def get_pending_bookings(self, execute_before: str) -> List[Dict[str, Any]]:
         """Get all pending bookings that should be executed before given time."""

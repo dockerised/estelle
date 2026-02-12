@@ -1,7 +1,7 @@
 """FastAPI REST API for Padel booking system."""
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -76,6 +76,62 @@ async def health_check():
             status_code=503,
             content={"status": "unhealthy", "error": str(e)}
         )
+
+
+class CreateBookingRequest(BaseModel):
+    """Request model for creating a booking."""
+    booking_date: str  # Format: YYYY-MM-DD
+    time_primary: str  # e.g., "10am", "7pm"
+    time_fallback: Optional[str] = None
+
+
+@app.post("/bookings", response_model=BookingResponse)
+async def create_booking(request: CreateBookingRequest):
+    """
+    Create a new booking that will be persisted in Redis.
+
+    The booking will survive workload restarts and scale-to-zero cycles.
+    It will be executed at the scheduled time (11:40 PM the day before).
+
+    Example:
+    ```json
+    {
+        "booking_date": "2026-02-28",
+        "time_primary": "10am",
+        "time_fallback": "12pm"
+    }
+    ```
+    """
+    try:
+        # Calculate execution time (11:40 PM the day before booking)
+        booking_dt = datetime.strptime(request.booking_date, "%Y-%m-%d")
+        execute_dt = booking_dt.replace(hour=23, minute=40) - timedelta(days=1)
+
+        # Create booking
+        booking_id = db.create_booking(
+            booking_date=request.booking_date,
+            time_primary=request.time_primary,
+            time_fallback=request.time_fallback,
+            execute_at=execute_dt.isoformat()
+        )
+
+        # Schedule it
+        scheduler.schedule_booking(booking_id, execute_dt)
+
+        return BookingResponse(
+            success=True,
+            message=f"Booking created and scheduled for execution at {execute_dt.strftime('%Y-%m-%d %H:%M')}",
+            data={
+                "booking_id": booking_id,
+                "booking_date": request.booking_date,
+                "execute_at": execute_dt.isoformat(),
+                "persisted_to_redis": True
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error creating booking: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/bookings/upload", response_model=BookingResponse)

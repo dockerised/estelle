@@ -6,13 +6,14 @@ from datetime import datetime, timedelta
 from io import StringIO
 from typing import List, Dict, Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.date import DateTrigger
+from antml:parameter name="apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from config import settings
 from database import db
 from booking_engine import engine
 from notifications import notifier
 from events_monitor import events_monitor
+from redis_persistence import redis_store
 
 logger = logging.getLogger(__name__)
 
@@ -221,10 +222,40 @@ class BookingScheduler:
     def reschedule_pending_bookings(self):
         """
         Reschedule all pending bookings on startup.
-        This ensures bookings survive application restarts.
+        Loads bookings from Redis (persistent) into local SQLite, then schedules them.
+        This ensures bookings survive scale-to-zero cycles.
         """
         try:
-            # Get all pending/scheduled bookings
+            logger.info("Loading bookings from Redis...")
+
+            # Connect to Redis and load pending bookings
+            if redis_store.connect():
+                redis_bookings = redis_store.get_pending_bookings()
+
+                # Sync Redis bookings to local SQLite database
+                for redis_booking in redis_bookings:
+                    booking_id = redis_booking['id']
+
+                    # Check if booking exists in SQLite
+                    local_booking = db.get_booking(booking_id)
+
+                    if not local_booking:
+                        # Create in SQLite from Redis data
+                        db.create_booking_from_dict(redis_booking)
+                        logger.info(f"✅ Loaded booking {booking_id} from Redis")
+                    else:
+                        # Update status in case it changed
+                        if local_booking['status'] != redis_booking['status']:
+                            db.update_booking_status(
+                                booking_id,
+                                redis_booking['status']
+                            )
+
+                logger.info(f"Loaded {len(redis_bookings)} bookings from Redis")
+            else:
+                logger.warning("Redis not available, using local SQLite only")
+
+            # Get all pending/scheduled bookings from SQLite
             pending = db.get_all_bookings("pending") + db.get_all_bookings("scheduled")
 
             rescheduled = 0
@@ -238,6 +269,12 @@ class BookingScheduler:
                         f"marking as failed"
                     )
                     db.update_booking_status(
+                        booking["id"],
+                        "failed",
+                        error_message="Execution time passed"
+                    )
+                    # Also update in Redis
+                    redis_store.update_booking_status(
                         booking["id"],
                         "failed",
                         error_message="Execution time passed"

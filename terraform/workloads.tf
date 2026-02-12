@@ -64,6 +64,7 @@ resource "cpln_workload" "padel_booking" {
       API_PORT                     = "8000"
       EVENTS_MONITORING_ENABLED    = tostring(var.events_monitoring_enabled)
       EVENTS_CHECK_INTERVAL_HOURS  = tostring(var.events_check_interval_hours)
+      REDIS_URL                    = "redis://redis-shared.dev.cpln.local:6379"
     }
 
     readiness_probe {
@@ -86,11 +87,9 @@ resource "cpln_workload" "padel_booking" {
       period_seconds        = 20
     }
 
-    # Note: Persistent storage temporarily disabled - focusing on headless browser fix
-    # volume {
-    #   uri  = "cpln://volumeset/${cpln_volume_set.booking_data.name}"
-    #   path = "/app/data"
-    # }
+    # Persistent storage handled by Redis (serverless workloads don't support ext4 volumes)
+    # Booking data persists in redis-shared across scale-to-zero cycles
+    # Screenshots are ephemeral (only needed for debugging during active session)
   }
 
   options {

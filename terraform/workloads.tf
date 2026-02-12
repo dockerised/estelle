@@ -24,13 +24,16 @@ resource "cpln_workload" "padel_booking" {
   gvc         = data.cpln_gvc.save30.name
   name        = var.project_name
   description = "Estelle Manor Padel Court Booking Automation"
-  type        = "standard"
+  type        = "serverless"  # Use serverless for KEDA-based cron scaling
 
   tags = merge(
     var.common_tags,
     {
       service     = "padel-booking"
       environment = var.environment
+      # Schedule: Run only 11:40 PM - 12:15 AM daily (30 minutes)
+      resumeCron  = "40 23 * * *"  # Resume at 11:40 PM every day
+      suspendCron = "15 0 * * *"   # Suspend at 12:15 AM every day
     }
   )
 
@@ -94,12 +97,13 @@ resource "cpln_workload" "padel_booking" {
     capacity_ai     = false
     timeout_seconds = 300
     debug           = false
+    # Suspended/resumed automatically via resumeCron/suspendCron tags
 
     autoscaling {
-      metric              = "disabled"
+      metric              = "concurrency"  # Use KEDA with concurrency metric
       target              = 1
       max_scale           = var.max_replicas
-      min_scale           = var.min_replicas
+      min_scale           = var.min_replicas  # Can be 0 with KEDA
       max_concurrency     = 1
       scale_to_zero_delay = 300
     }

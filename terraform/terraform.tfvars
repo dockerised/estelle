@@ -21,9 +21,9 @@ estelle_image = "/org/george-crosby-015c08/image/gc-estelle-padel-booking:latest
 cpu    = "500m"
 memory = "1Gi"
 
-# Scaling Configuration (always keep 1 instance running)
-min_replicas = 1
-max_replicas = 1
+# Scaling Configuration (KEDA cron-based: 0 replicas except 11:40PM-12:15AM)
+min_replicas = 0  # Scale to zero when not in booking window
+max_replicas = 1  # One replica during booking window
 
 # Application Settings
 dry_run                    = false

@@ -29,27 +29,19 @@ class BookingEngine:
         logger.info("Initializing Playwright browser (headed mode with Xvfb virtual display)")
         self._playwright = await async_playwright().start()
 
-        # Run in headed mode (not headless) since we have Xvfb providing a virtual display
-        # This bypasses all headless detection since the browser is actually "headed"
+        # Run in headed mode to allow local debugging
+        # Check if we should run headless (cloud) or headed (local debugging)
+        import os
+        is_local_debug = os.environ.get('DISPLAY', '').startswith(':') and ':99' not in os.environ.get('DISPLAY', '')
+
+        logger.info(f"Launching browser (headless={not is_local_debug}, display={os.environ.get('DISPLAY', 'none')})")
         self._browser = await self._playwright.chromium.launch(
-            headless=False,  # Headed mode with Xvfb virtual display
+            headless=(not is_local_debug),  # Headed if real display, headless otherwise
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-backgrounding-occluded-windows",
-                "--disable-renderer-backgrounding",
-                "--disable-background-timer-throttling",
-                "--disable-infobars",
-                "--disable-features=IsolateOrigins,site-per-process",
-                "--disable-site-isolation-trials",
-                "--disable-web-security",
-                "--disable-features=VizDisplayCompositor"
             ],
-            chromium_sandbox=False,
-            slow_mo=500  # Add 500ms delay between actions to appear more human
+            slow_mo=100  # Small delay between actions
         )
         return self._browser
 
@@ -61,8 +53,8 @@ class BookingEngine:
         if not self._browser:
             await self.init_browser()
 
-        # Complete user agent string to avoid detection
-        user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        # Windows user agent (more common, less suspicious)
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
         # Try to load saved session state
         if settings.browser_state_path.exists() and not fresh:

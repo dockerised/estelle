@@ -359,8 +359,12 @@ class BookingEngine:
             # The date input should exist (don't wait for visible - jQuery datepicker might hide it)
             logger.info("Looking for date input in DOM...")
 
-            # Wait for element to exist in DOM
-            await page.wait_for_selector('input#from_date', timeout=30000)
+            # Give JavaScript more time to render the date picker (it takes a few seconds)
+            logger.info("Waiting for page JavaScript to fully load...")
+            await asyncio.sleep(5)
+
+            # Wait for element to exist in DOM (increased timeout - JS takes time to render)
+            await page.wait_for_selector('input#from_date', timeout=60000)
             logger.info("Date input found in DOM!")
 
             # Scroll it into view to make sure it's interactable

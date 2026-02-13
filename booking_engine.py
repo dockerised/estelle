@@ -49,7 +49,7 @@ class BookingEngine:
                 "--disable-features=VizDisplayCompositor"
             ],
             chromium_sandbox=False,
-            slow_mo=50  # Add 50ms delay between actions to appear more human
+            slow_mo=500  # Add 500ms delay between actions to appear more human
         )
         return self._browser
 
@@ -241,7 +241,12 @@ class BookingEngine:
                 # Navigate to homepage first to establish session properly
                 logger.info("Navigating to homepage to establish session")
                 await page.goto("https://home.estellemanor.com/", wait_until="load", timeout=30000)
-                await asyncio.sleep(3)
+
+                # Wait longer to appear more human (10-15 seconds)
+                import random
+                wait_time = random.uniform(10, 15)
+                logger.info(f"Waiting {wait_time:.1f} seconds after login (appearing human)...")
+                await asyncio.sleep(wait_time)
                 logger.info(f"Homepage loaded, URL: {page.url}")
 
                 await self.save_session()
@@ -272,11 +277,17 @@ class BookingEngine:
             logger.info(f"Navigating to booking page for date {booking_date}")
             logger.info(f"Target URL: {settings.booking_url}")
 
-            # Add random delay before navigation (1-3 seconds)
-            await asyncio.sleep(__import__('random').uniform(1, 3))
+            # Add long random delay before navigation to appear human (5-10 seconds)
+            import random
+            wait_time = random.uniform(5, 10)
+            logger.info(f"Waiting {wait_time:.1f} seconds before navigating...")
+            await asyncio.sleep(wait_time)
 
             # Human-like mouse movement before navigation
             await self.human_like_mouse_movement(page)
+
+            # Another pause after mouse movement
+            await asyncio.sleep(random.uniform(2, 4))
 
             await page.goto(settings.booking_url, wait_until="networkidle", timeout=60000)
 
@@ -288,8 +299,10 @@ class BookingEngine:
             if actual_url != settings.booking_url:
                 logger.warning(f"REDIRECT DETECTED: Expected {settings.booking_url} but got {actual_url}")
 
-            logger.info("Page loaded, waiting for JavaScript...")
-            await asyncio.sleep(5)
+            # Wait much longer for page to fully load and JavaScript to initialize
+            logger.info("Page loaded, waiting for JavaScript to initialize...")
+            import random
+            await asyncio.sleep(random.uniform(8, 12))
 
             # Take screenshot for debugging
             await page.screenshot(path="data/screenshots/booking_page_loaded.png", full_page=True)

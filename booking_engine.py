@@ -41,9 +41,15 @@ class BookingEngine:
                 "--no-default-browser-check",
                 "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding",
-                "--disable-background-timer-throttling"
+                "--disable-background-timer-throttling",
+                "--disable-infobars",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-site-isolation-trials",
+                "--disable-web-security",
+                "--disable-features=VizDisplayCompositor"
             ],
-            chromium_sandbox=False
+            chromium_sandbox=False,
+            slow_mo=50  # Add 50ms delay between actions to appear more human
         )
         return self._browser
 
@@ -68,7 +74,20 @@ class BookingEngine:
                 locale="en-GB",
                 timezone_id="Europe/London",
                 geolocation={"latitude": 51.9244, "longitude": -0.9161},  # Near Estelle Manor
-                permissions=["geolocation"]
+                permissions=["geolocation"],
+                extra_http_headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
+                    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    "Sec-Ch-Ua-Mobile": "?0",
+                    "Sec-Ch-Ua-Platform": '"Linux"',
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1"
+                }
             )
         else:
             logger.info("Creating fresh browser context")
@@ -78,7 +97,20 @@ class BookingEngine:
                 locale="en-GB",
                 timezone_id="Europe/London",
                 geolocation={"latitude": 51.9244, "longitude": -0.9161},  # Near Estelle Manor
-                permissions=["geolocation"]
+                permissions=["geolocation"],
+                extra_http_headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
+                    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    "Sec-Ch-Ua-Mobile": "?0",
+                    "Sec-Ch-Ua-Platform": '"Linux"',
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1"
+                }
             )
 
         # Add comprehensive JavaScript to mask headless detection
@@ -124,10 +156,50 @@ class BookingEngine:
                 })
             });
 
+            // Mock hardware concurrency
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 8
+            });
+
+            // Mock device memory
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8
+            });
+
+            // Mock platform
+            Object.defineProperty(navigator, 'platform', {
+                get: () => 'Linux x86_64'
+            });
+
+            // Mock vendor
+            Object.defineProperty(navigator, 'vendor', {
+                get: () => 'Google Inc.'
+            });
+
             // Remove Playwright-specific properties
             delete window.__playwright;
             delete window.__pw_manual;
             delete window.__PW_inspect;
+
+            // Mask headless-specific WebGL vendor
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                if (parameter === 37445) {
+                    return 'Intel Inc.';
+                }
+                if (parameter === 37446) {
+                    return 'Intel Iris OpenGL Engine';
+                }
+                return getParameter.call(this, parameter);
+            };
+
+            // Add realistic screen properties
+            Object.defineProperty(screen, 'availWidth', {
+                get: () => 1920
+            });
+            Object.defineProperty(screen, 'availHeight', {
+                get: () => 1080
+            });
         """)
 
         return self._context
@@ -182,11 +254,30 @@ class BookingEngine:
             logger.error(f"Login failed: {e}")
             return False
 
+    async def human_like_mouse_movement(self, page: Page):
+        """Add random mouse movements to appear more human."""
+        try:
+            import random
+            for _ in range(random.randint(2, 4)):
+                x = random.randint(100, 1800)
+                y = random.randint(100, 900)
+                await page.mouse.move(x, y)
+                await asyncio.sleep(random.uniform(0.1, 0.3))
+        except Exception as e:
+            logger.debug(f"Mouse movement simulation failed: {e}")
+
     async def prepare_booking_page(self, page: Page, booking_date: str) -> bool:
         """Navigate to booking page and prepare for midnight submission."""
         try:
             logger.info(f"Navigating to booking page for date {booking_date}")
             logger.info(f"Target URL: {settings.booking_url}")
+
+            # Add random delay before navigation (1-3 seconds)
+            await asyncio.sleep(__import__('random').uniform(1, 3))
+
+            # Human-like mouse movement before navigation
+            await self.human_like_mouse_movement(page)
+
             await page.goto(settings.booking_url, wait_until="networkidle", timeout=60000)
 
             # Log where we actually ended up

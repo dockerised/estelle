@@ -190,7 +190,7 @@ class Database:
             )
 
         # Also update in Redis for persistence
-        update_fields = {'status': status}
+        update_fields = {}
         if court_name:
             update_fields['court_name'] = court_name
         if booked_time:

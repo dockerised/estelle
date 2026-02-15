@@ -26,17 +26,13 @@ class BookingEngine:
 
     async def init_browser(self) -> Browser:
         """Initialize Playwright browser in headed mode with Xvfb virtual display."""
-        logger.info("Initializing Playwright browser (headed mode with Xvfb virtual display)")
+        logger.info("Initializing Playwright browser")
         self._playwright = await async_playwright().start()
 
-        # Run with visible browser window for local debugging
-        logger.info("Launching visible Chrome browser with slow human-like actions...")
-        self._browser = await self._playwright.chromium.launch(
-            headless=False,  # Visible browser window
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-            ],
+        # Use Firefox with slow_mo=1000 for human-like behavior
+        logger.info("Launching Firefox browser with slow human-like actions...")
+        self._browser = await self._playwright.firefox.launch(
+            headless=True,  # Headless for cloud deployment
             slow_mo=1000  # 1 second delay between actions (very slow, very human)
         )
         return self._browser
@@ -58,14 +54,12 @@ class BookingEngine:
             logger.info("Loading saved browser session")
             self._context = await self._browser.new_context(
                 storage_state=str(settings.browser_state_path),
-                viewport={"width": 390, "height": 844},  # iPhone 14 Pro size
+                viewport={"width": 1920, "height": 1080},  # Standard desktop
                 user_agent=user_agent,
                 locale="en-GB",
                 timezone_id="Europe/London",
                 geolocation={"latitude": 51.9244, "longitude": -0.9161},  # Near Estelle Manor
                 permissions=["geolocation"],
-                is_mobile=True,
-                has_touch=True,
                 extra_http_headers={
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                     "Accept-Encoding": "gzip, deflate, br",
@@ -82,14 +76,12 @@ class BookingEngine:
         else:
             logger.info("Creating fresh browser context (mobile)")
             self._context = await self._browser.new_context(
-                viewport={"width": 390, "height": 844},  # iPhone 14 Pro size
+                viewport={"width": 1920, "height": 1080},  # Standard desktop
                 user_agent=user_agent,
                 locale="en-GB",
                 timezone_id="Europe/London",
                 geolocation={"latitude": 51.9244, "longitude": -0.9161},  # Near Estelle Manor
                 permissions=["geolocation"],
-                is_mobile=True,
-                has_touch=True,
                 extra_http_headers={
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                     "Accept-Encoding": "gzip, deflate, br",
@@ -263,165 +255,60 @@ class BookingEngine:
             logger.debug(f"Mouse movement simulation failed: {e}")
 
     async def prepare_booking_page(self, page: Page, booking_date: str) -> bool:
-        """Navigate to booking page and prepare for midnight submission."""
+        """Navigate to booking page using simple click-through method."""
         try:
             logger.info(f"Navigating to booking page for date {booking_date}")
-            logger.info(f"Target URL: {settings.booking_url}")
 
-            # Add long random delay before navigation to appear human (5-10 seconds)
-            import random
-            wait_time = random.uniform(5, 10)
-            logger.info(f"Waiting {wait_time:.1f} seconds before navigating...")
-            await asyncio.sleep(wait_time)
-
-            # Human-like mouse movement before navigation
-            await self.human_like_mouse_movement(page)
-
-            # Another pause after mouse movement
-            await asyncio.sleep(random.uniform(2, 4))
-
-            # ATTEMPT 1: Navigate by clicking links instead of direct goto
-            # Try to find and click a link to the booking/activities page
-            logger.info("Attempting to navigate via clicking links (more human-like)...")
-
-            # Look for common link texts that might lead to booking
-            link_texts = ['book', 'booking', 'activities', 'padel', 'tennis', 'courts', 'spa']
-            clicked = False
-
-            for text in link_texts:
-                try:
-                    link = page.locator(f'a:has-text("{text}")').first
-                    if await link.count() > 0:
-                        logger.info(f"Found link with text '{text}', clicking...")
-                        await link.click(timeout=5000)
-                        await asyncio.sleep(random.uniform(2, 4))
-                        clicked = True
-                        break
-                except:
-                    continue
-
-            # If no link found, fall back to direct navigation
-            if not clicked:
-                logger.info("No booking link found, using direct navigation...")
-                await page.goto(settings.booking_url, wait_until="networkidle", timeout=60000)
-            else:
-                # Wait for navigation to complete
-                await page.wait_for_load_state("networkidle", timeout=30000)
-
-            # Log where we actually ended up
-            actual_url = page.url
-            logger.info(f"After navigation, current URL: {actual_url}")
-
-            # Check if we were redirected
-            if actual_url != settings.booking_url:
-                logger.warning(f"REDIRECT DETECTED: Expected {settings.booking_url} but got {actual_url}")
-
-            # Wait much longer for page to fully load and JavaScript to initialize
-            logger.info("Page loaded, waiting for JavaScript to initialize...")
-            import random
-            await asyncio.sleep(random.uniform(8, 12))
-
-            # Take screenshot for debugging
-            await page.screenshot(path="data/screenshots/booking_page_loaded.png", full_page=True)
-            logger.info("Screenshot taken: booking_page_loaded.png")
-
-            # Log page title for debugging
-            page_title = await page.title()
-            logger.info(f"Page title: {page_title}")
-
-            # Try multiple methods to dismiss overlays/modals (AGGRESSIVE - site changed since Feb 5th)
-            logger.info("Attempting to dismiss any popups/modals...")
-            try:
-                # Wait a bit for any popups to appear
-                await asyncio.sleep(3)
-
-                # Method 1: Press Escape multiple times first
-                for i in range(5):
-                    await page.keyboard.press('Escape')
-                    await asyncio.sleep(0.3)
-
-                # Method 2: Look for and click ANY buttons containing "close", "accept", "ok", "dismiss"
-                button_texts = ['close', 'accept', 'ok', 'dismiss', 'continue', 'got it', 'agree']
-                for text in button_texts:
-                    try:
-                        buttons = page.locator(f'button:has-text("{text}"), a:has-text("{text}")')
-                        count = await buttons.count()
-                        if count > 0:
-                            for i in range(min(count, 3)):  # Click up to 3 matches
-                                try:
-                                    await buttons.nth(i).click(timeout=2000)
-                                    logger.info(f"Clicked button with text: {text}")
-                                    await asyncio.sleep(0.5)
-                                except:
-                                    pass
-                    except:
-                        pass
-
-                # Method 3: Click specific selectors
-                close_selectors = [
-                    'button.close', '.modal-close', '[aria-label="Close"]',
-                    '.popup-close', '#close-button', '[data-dismiss="modal"]',
-                    '.cookie-accept', '#accept-cookies', '.triptease-close',
-                    '.tt-messaging__container button', '.modal-backdrop'
-                ]
-                for selector in close_selectors:
-                    try:
-                        close_btn = page.locator(selector)
-                        if await close_btn.count() > 0:
-                            await close_btn.first.click(timeout=2000)
-                            logger.info(f"Clicked: {selector}")
-                            await asyncio.sleep(0.5)
-                    except:
-                        pass
-
-                # Method 4: Click anywhere on page to dismiss
-                try:
-                    await page.click('body', position={'x': 10, 'y': 10}, timeout=2000)
-                    await asyncio.sleep(1)
-                except:
-                    pass
-
-                logger.info("Modal dismissal complete")
-
-            except Exception as e:
-                logger.debug(f"Modal dismissal attempts completed: {e}")
-
-            # The date input should exist (don't wait for visible - jQuery datepicker might hide it)
-            logger.info("Looking for date input in DOM...")
-
-            # Give JavaScript more time to render the date picker (it takes a few seconds)
-            logger.info("Waiting for page JavaScript to fully load...")
+            # Wait 5 seconds before starting (appear human)
             await asyncio.sleep(5)
 
-            # Wait for element to exist in DOM (increased timeout - JS takes time to render)
-            await page.wait_for_selector('input#from_date', timeout=60000)
-            logger.info("Date input found in DOM!")
+            # STEP 1: Click "Book Now" button
+            logger.info("Step 1: Clicking 'Book Now' button...")
+            await page.click('#book-now-button')
+            await asyncio.sleep(3)
+            logger.info(f"After Book Now click, URL: {page.url}")
 
-            # Scroll it into view to make sure it's interactable
-            await page.evaluate('document.querySelector("#from_date").scrollIntoView()')
-            await asyncio.sleep(1)
+            # STEP 2: Click "Padel Courts" link
+            logger.info("Step 2: Clicking 'Padel Courts' link...")
+            await page.click('a:has-text("Padel Courts")')
+            await asyncio.sleep(3)
+            logger.info(f"After Padel Courts click, URL: {page.url}")
 
-            # Try to make it visible if it's hidden
-            await page.evaluate('document.querySelector("#from_date").style.display = "block"')
-            await page.evaluate('document.querySelector("#from_date").style.visibility = "visible"')
-            await asyncio.sleep(0.5)
+            # STEP 3: Click "BOOK - 1Hr" button
+            logger.info("Step 3: Clicking 'BOOK - 1Hr' button...")
+            await page.click('a:has-text("BOOK - 1Hr")')
+            await asyncio.sleep(5)
+            logger.info(f"After BOOK - 1Hr click, URL: {page.url}")
 
-            # Fill the date (format: DD/MM/YYYY based on URL example)
+            # STEP 4: Dismiss any popups
+            logger.info("Dismissing popups...")
+            for _ in range(3):
+                await page.keyboard.press('Escape')
+                await asyncio.sleep(0.5)
+
+            # STEP 5: Fill date
+            logger.info("Waiting for date input...")
+            await asyncio.sleep(2)
+
+            # Wait for date input to be available
+            await page.wait_for_selector('input#from_date', timeout=30000)
+            logger.info("Date input found")
+
             # Convert from YYYY-MM-DD to DD/MM/YYYY
             dt = datetime.strptime(booking_date, "%Y-%m-%d")
             formatted_date = dt.strftime("%d/%m/%Y")
-
             logger.info(f"Filling date: {formatted_date}")
 
-            # Use JavaScript to set the value directly (jQuery datepicker friendly)
+            # Fill date using JavaScript
             await page.evaluate(f'document.querySelector("#from_date").value = "{formatted_date}"')
+            await page.evaluate('document.querySelector("#from_date").dispatchEvent(new Event("change", {{ bubbles: true }}))')
+            await asyncio.sleep(1)
 
-            # Trigger change event so datepicker knows the value changed
-            await page.evaluate('document.querySelector("#from_date").dispatchEvent(new Event("change", { bubbles: true }))')
-
-            # Close the datepicker popup by pressing Escape
-            await page.keyboard.press('Escape')
-            await asyncio.sleep(0.5)
+            # STEP 6: Click "Show Availability"
+            logger.info("Clicking 'Show Availability' button...")
+            await page.click('#btnApply')
+            await asyncio.sleep(5)
+            logger.info("Availability results should now be visible")
 
             logger.info("Booking page prepared and ready")
             return True

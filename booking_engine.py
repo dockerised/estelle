@@ -53,27 +53,29 @@ class BookingEngine:
         if not self._browser:
             await self.init_browser()
 
-        # Windows user agent (more common, less suspicious)
-        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        # ATTEMPT 2: Try mobile user agent (different detection profile)
+        # Mobile iPhone user agent
+        user_agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
         # Try to load saved session state
         if settings.browser_state_path.exists() and not fresh:
             logger.info("Loading saved browser session")
             self._context = await self._browser.new_context(
                 storage_state=str(settings.browser_state_path),
-                viewport={"width": 1920, "height": 1080},
+                viewport={"width": 390, "height": 844},  # iPhone 14 Pro size
                 user_agent=user_agent,
                 locale="en-GB",
                 timezone_id="Europe/London",
                 geolocation={"latitude": 51.9244, "longitude": -0.9161},  # Near Estelle Manor
                 permissions=["geolocation"],
+                is_mobile=True,
+                has_touch=True,
                 extra_http_headers={
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                     "Accept-Encoding": "gzip, deflate, br",
                     "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
-                    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                    "Sec-Ch-Ua-Mobile": "?0",
-                    "Sec-Ch-Ua-Platform": '"Linux"',
+                    "Sec-Ch-Ua-Mobile": "?1",
+                    "Sec-Ch-Ua-Platform": '"iOS"',
                     "Sec-Fetch-Dest": "document",
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Site": "none",
@@ -82,21 +84,22 @@ class BookingEngine:
                 }
             )
         else:
-            logger.info("Creating fresh browser context")
+            logger.info("Creating fresh browser context (mobile)")
             self._context = await self._browser.new_context(
-                viewport={"width": 1920, "height": 1080},
+                viewport={"width": 390, "height": 844},  # iPhone 14 Pro size
                 user_agent=user_agent,
                 locale="en-GB",
                 timezone_id="Europe/London",
                 geolocation={"latitude": 51.9244, "longitude": -0.9161},  # Near Estelle Manor
                 permissions=["geolocation"],
+                is_mobile=True,
+                has_touch=True,
                 extra_http_headers={
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                     "Accept-Encoding": "gzip, deflate, br",
                     "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
-                    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                    "Sec-Ch-Ua-Mobile": "?0",
-                    "Sec-Ch-Ua-Platform": '"Linux"',
+                    "Sec-Ch-Ua-Mobile": "?1",
+                    "Sec-Ch-Ua-Platform": '"iOS"',
                     "Sec-Fetch-Dest": "document",
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Site": "none",

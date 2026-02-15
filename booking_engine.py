@@ -304,11 +304,9 @@ class BookingEngine:
             await page.evaluate('document.querySelector("#from_date").dispatchEvent(new Event("change", {{ bubbles: true }}))')
             await asyncio.sleep(1)
 
-            # STEP 6: Click "Show Availability"
-            logger.info("Clicking 'Show Availability' button...")
-            await page.click('#btnApply')
-            await asyncio.sleep(5)
-            logger.info("Availability results should now be visible")
+            # STEP 6: DO NOT click "Show Availability" yet
+            # We'll click it at midnight (00:00) to get fresh availability
+            logger.info("Date filled - ready to click 'Show Availability' at midnight")
 
             logger.info("Booking page prepared and ready")
             return True

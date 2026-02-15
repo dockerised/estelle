@@ -281,7 +281,33 @@ class BookingEngine:
             # Another pause after mouse movement
             await asyncio.sleep(random.uniform(2, 4))
 
-            await page.goto(settings.booking_url, wait_until="networkidle", timeout=60000)
+            # ATTEMPT 1: Navigate by clicking links instead of direct goto
+            # Try to find and click a link to the booking/activities page
+            logger.info("Attempting to navigate via clicking links (more human-like)...")
+
+            # Look for common link texts that might lead to booking
+            link_texts = ['book', 'booking', 'activities', 'padel', 'tennis', 'courts', 'spa']
+            clicked = False
+
+            for text in link_texts:
+                try:
+                    link = page.locator(f'a:has-text("{text}")').first
+                    if await link.count() > 0:
+                        logger.info(f"Found link with text '{text}', clicking...")
+                        await link.click(timeout=5000)
+                        await asyncio.sleep(random.uniform(2, 4))
+                        clicked = True
+                        break
+                except:
+                    continue
+
+            # If no link found, fall back to direct navigation
+            if not clicked:
+                logger.info("No booking link found, using direct navigation...")
+                await page.goto(settings.booking_url, wait_until="networkidle", timeout=60000)
+            else:
+                # Wait for navigation to complete
+                await page.wait_for_load_state("networkidle", timeout=30000)
 
             # Log where we actually ended up
             actual_url = page.url

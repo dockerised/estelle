@@ -50,10 +50,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
-RUN playwright install chromium
+# Install Playwright browsers - use Firefox for better bot detection bypass
+RUN playwright install firefox
 # Install deps with workaround for missing font packages
-RUN playwright install-deps chromium || apt-get install -y fonts-unifont fonts-ubuntu || true
+RUN playwright install-deps firefox || apt-get install -y fonts-unifont fonts-ubuntu || true
 
 # Copy application code
 COPY . .

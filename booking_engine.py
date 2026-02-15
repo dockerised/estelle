@@ -304,9 +304,11 @@ class BookingEngine:
             await page.evaluate('document.querySelector("#from_date").dispatchEvent(new Event("change", {{ bubbles: true }}))')
             await asyncio.sleep(1)
 
-            # STEP 6: DO NOT click "Show Availability" yet
-            # We'll click it at midnight (00:00) to get fresh availability
-            logger.info("Date filled - ready to click 'Show Availability' at midnight")
+            # STEP 6: Click "Show Availability"
+            logger.info("Clicking 'Show Availability' button...")
+            await page.click('#btnApply')
+            await asyncio.sleep(5)
+            logger.info("Availability results should now be visible")
 
             logger.info("Booking page prepared and ready")
             return True
@@ -493,15 +495,7 @@ class BookingEngine:
 
             db.log_execution(booking_id, "login", "success")
 
-            # Prepare booking page
-            logger.info("Preparing booking page")
-            prep_success = await self.prepare_booking_page(page, booking_date)
-            if not prep_success:
-                raise Exception("Failed to prepare booking page")
-
-            db.log_execution(booking_id, "prepare_page", "success")
-
-            # Wait until exactly midnight to submit
+            # Wait until exactly midnight before navigating to booking page
             # We're at 11:50pm, so midnight is ~10 minutes away
             now = datetime.now()
 
@@ -517,24 +511,18 @@ class BookingEngine:
 
             if now < midnight:
                 wait_seconds = (midnight - now).total_seconds()
-                logger.info(f"Waiting {wait_seconds:.1f} seconds until midnight ({midnight.strftime('%Y-%m-%d %H:%M:%S')})")
+                logger.info(f"Login complete. Waiting {wait_seconds:.1f} seconds until midnight ({midnight.strftime('%Y-%m-%d %H:%M:%S')})")
                 await asyncio.sleep(wait_seconds)
             else:
                 logger.warning("Midnight has already passed, executing immediately")
 
-            # At midnight: click "Show Availability"
-            logger.info("Clicking 'Show Availability' link")
-            if not settings.dry_run:
-                # Find and click the show availability link
-                show_link = page.locator('a:has-text("Show Availability")')
-                await show_link.click()
-                await asyncio.sleep(2)
-            else:
-                # In dry run, still click to see results
-                show_link = page.locator('a:has-text("Show Availability")')
-                await show_link.click()
-                await asyncio.sleep(3)
+            # At midnight: Navigate to booking page and fill everything
+            logger.info("MIDNIGHT - Starting booking navigation")
+            prep_success = await self.prepare_booking_page(page, booking_date)
+            if not prep_success:
+                raise Exception("Failed to prepare booking page")
 
+            db.log_execution(booking_id, "prepare_page", "success")
             db.log_execution(booking_id, "show_availability", "clicked")
 
             # Try primary time slot first

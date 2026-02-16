@@ -274,11 +274,24 @@ class BookingEngine:
             await asyncio.sleep(3)
             logger.info(f"After Padel Courts click, URL: {page.url}")
 
-            # STEP 3: Click "BOOK - 1Hr" button
-            logger.info("Step 3: Clicking 'BOOK - 1Hr' button...")
-            await page.click('a:has-text("BOOK - 1Hr")')
-            await asyncio.sleep(5)
-            logger.info(f"After BOOK - 1Hr click, URL: {page.url}")
+            # STEP 3: Determine which month button to click based on booking date
+            dt = datetime.strptime(booking_date, "%Y-%m-%d")
+            month_name = dt.strftime("%B").upper()  # e.g., "MARCH", "FEBRUARY"
+
+            logger.info(f"Step 3: Looking for '{month_name}' calendar button...")
+            month_link = page.locator(f'a.btn.btn-secondary:has-text("{month_name}")').first
+
+            if await month_link.count() > 0:
+                logger.info(f"Found {month_name} button, clicking...")
+                await month_link.click()
+                await asyncio.sleep(5)
+                logger.info(f"Navigated to {month_name} booking page: {page.url}")
+            else:
+                # Fallback: Click BOOK - 1Hr if month button not found
+                logger.warning(f"{month_name} button not found, clicking BOOK - 1Hr...")
+                await page.click('a:has-text("BOOK - 1Hr")')
+                await asyncio.sleep(5)
+                logger.info(f"After BOOK - 1Hr click, URL: {page.url}")
 
             # STEP 4: Dismiss any popups
             logger.info("Dismissing popups...")
